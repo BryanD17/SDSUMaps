@@ -32,11 +32,15 @@ yarn-error.*
 
 # local env files
 .env
-.env.local
+.env.*
+!.env.example
 .env*.local
 
 # typescript
 *.tsbuildinfo
+
+# agent / sweep scratch
+.agent/
 
 app-example
 
