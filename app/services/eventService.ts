@@ -1,14 +1,22 @@
-// Firestore write service for the `events` collection.
+// Firestore read/write service for the `events` collection.
 // Schema and field rationale: docs/DATA_SCHEMA.md.
 //
-// Validation duplicates AddEventModal on purpose: the form fails fast for
-// the UI; the service is the last line of defense for any caller (tests,
-// scripts, future code) that bypasses the form.
+// addEvent — A3. Validation duplicates AddEventModal on purpose: the form
+// fails fast for the UI; the service is the last line of defense for any
+// caller (tests, scripts, future code) that bypasses the form.
+//
+// getActiveEvents — A4. `endTime` IS the expiresAt field per the schema
+// doc; querying it directly avoids the drift a mirror field would silently
+// introduce.
 import {
   Timestamp,
   addDoc,
   collection,
+  getDocs,
+  orderBy,
+  query,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "../utils/firebase";
 
@@ -19,6 +27,16 @@ const DESC_MAX = 500;
 const CLUB_MAX = 60;
 
 export type EventInput = {
+  title: string;
+  description: string;
+  location: string;
+  clubName: string;
+  startTime: Date;
+  endTime: Date;
+};
+
+export type ActiveEvent = {
+  id: string;
   title: string;
   description: string;
   location: string;
@@ -71,4 +89,25 @@ export async function addEvent(input: EventInput): Promise<string> {
     createdBy: auth.currentUser?.uid ?? null,
   });
   return docRef.id;
+}
+
+export async function getActiveEvents(): Promise<ActiveEvent[]> {
+  const q = query(
+    collection(db, COLLECTION),
+    where("endTime", ">", Timestamp.now()),
+    orderBy("endTime", "asc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      title: data.title,
+      description: data.description,
+      location: data.location,
+      clubName: data.clubName,
+      startTime: (data.startTime as Timestamp).toDate(),
+      endTime: (data.endTime as Timestamp).toDate(),
+    };
+  });
 }
