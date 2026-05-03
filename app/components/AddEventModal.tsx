@@ -1,7 +1,6 @@
 // Polished Add Event modal: labeled fields, inline validation, double-submit
-// guard, unmount-safe async, success/failure feedback. addEvent is stubbed
-// here until Brandon's eventService.ts lands; swap addEventStub for the real
-// import when it does.
+// guard, unmount-safe async, success/failure feedback. Posts to Firestore
+// via app/services/eventService.ts (A3).
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,9 +13,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { addEvent } from "../services/eventService";
 import { colors, radius, spacing, tap, typography } from "../constants/theme";
 
-export type EventInput = {
+// Form state holds the raw text-input strings. The service expects parsed
+// Date objects — we convert at the submit boundary.
+type EventFormState = {
   title: string;
   description: string;
   location: string;
@@ -25,9 +27,9 @@ export type EventInput = {
   endDate: string;
 };
 
-type FieldErrors = Partial<Record<keyof EventInput, string>>;
+type FieldErrors = Partial<Record<keyof EventFormState, string>>;
 
-const EMPTY_FORM: EventInput = {
+const EMPTY_FORM: EventFormState = {
   title: "",
   description: "",
   location: "",
@@ -45,7 +47,7 @@ function parseDate(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function validate(form: EventInput): FieldErrors {
+function validate(form: EventFormState): FieldErrors {
   const errors: FieldErrors = {};
   const title = form.title.trim();
   if (!title) errors.title = "Required";
@@ -74,12 +76,6 @@ function validate(form: EventInput): FieldErrors {
   return errors;
 }
 
-// TODO(brandon): replace with real addEvent() from app/services/eventService.ts.
-async function addEventStub(_payload: EventInput): Promise<string> {
-  await new Promise((r) => setTimeout(r, 600));
-  return `stub-${Date.now()}`;
-}
-
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -89,7 +85,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
-  const [form, setForm] = useState<EventInput>(EMPTY_FORM);
+  const [form, setForm] = useState<EventFormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -103,7 +99,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
     };
   }, []);
 
-  function update<K extends keyof EventInput>(key: K, value: EventInput[K]) {
+  function update<K extends keyof EventFormState>(key: K, value: EventFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
     // Clear that field's error as soon as the user types again.
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
@@ -130,7 +126,18 @@ export default function AddEventModal({ visible, onClose }: Props) {
 
     setSubmitting(true);
     try {
-      await addEventStub(form);
+      // Form-level validate() above already proved these parse, so the
+      // non-null assertions are safe. Service does its own sanity check.
+      const startTime = parseDate(form.startDate)!;
+      const endTime = parseDate(form.endDate)!;
+      await addEvent({
+        title: form.title,
+        description: form.description,
+        location: form.location,
+        clubName: form.clubName,
+        startTime,
+        endTime,
+      });
       if (!mountedRef.current) return;
       Alert.alert("Event added", "Your event has been posted.");
       reset();
@@ -146,7 +153,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
 
   // Borders go red only after an attempted submit, so users aren't yelled
   // at while still filling in the form.
-  function showError(key: keyof EventInput): boolean {
+  function showError(key: keyof EventFormState): boolean {
     return submitAttempted && !!errors[key];
   }
 
