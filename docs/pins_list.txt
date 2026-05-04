@@ -1,0 +1,53 @@
+SDSU Maps — Pin Audit (Track D, D1)
+====================================
+
+Owner: Matt
+Branch: feature/matt/pins-integration
+Generated against: app/constants/locations.ts (D3)
+Reference map: SDSU Fall 2019 official campus map (2600x1727, aspect ~3:2).
+Current asset:  assets/images/sdsu_campus_map.jpg (placeholder, same aspect).
+
+Coordinates (x, y) are proportional fractions of the map image:
+  x = 0 .. 1 (left .. right)
+  y = 0 .. 1 (top  .. bottom)
+
+Audit baseline: prior to D2, app/index.tsx had 2 hardcoded pins with no
+LocationId, no display name, and no link to Firestore's `event.location`.
+Those have been replaced by the LOCATIONS-driven loop below.
+
+Order matches the LOCATIONS map (top-of-map first, bottom last) so later
+pins win z-order ties under the renderer's draw order.
+
+PinID            | Location                                          |   x   |   y   | Notes
+-----------------+---------------------------------------------------+-------+-------+--------------------------------------------------
+STORM_HALL       | Storm Hall                                        | 0.35  | 0.27  | —
+PSFA             | Professional Studies & Fine Arts (PSFA)           | 0.42  | 0.27  | —
+HARDY_TOWER      | Hardy Tower                                       | 0.49  | 0.27  | Clock tower — campus landmark.
+GMCS             | Geology, Math & Computer Science (GMCS)           | 0.72  | 0.28  | —
+HEPNER_HALL      | Hepner Hall                                       | 0.51  | 0.34  | Iconic SDSU dome — center of historic core.
+ENS              | Exercise & Nutritional Sciences (ENS)             | 0.45  | 0.42  | —
+LOVE_LIBRARY     | Malcolm A. Love Library                           | 0.56  | 0.47  | Main library — 24/5 during finals.
+EBA              | Education & Business Administration (EBA)         | 0.76  | 0.50  | —
+VIEJAS_ARENA     | Viejas Arena                                      | 0.35  | 0.53  | Basketball, concerts, large events.
+MANCHESTER_HALL  | Manchester Hall                                   | 0.63  | 0.54  | —
+STUDENT_UNION    | Conrad Prebys Aztec Student Union                 | 0.65  | 0.59  | Dining, study lounges, student org offices.
+ADAMS_HUMANITIES | Adams Humanities (AH)                             | 0.59  | 0.62  | —
+
+Total pins: 12 (target was 10–15).
+
+Schema contract
+---------------
+PinID is the value persisted to Firestore as `event.location`
+(see docs/DATA_SCHEMA.md, "Collection: events"). The display string in
+the "Location" column is UI-only — never persist it. `getLocationById()`
+in app/constants/locations.ts is the safe lookup.
+
+Open follow-ups
+---------------
+- Coordinates were read off the Fall 2019 official map. If Bryan's Track
+  C asset uses a meaningfully different aspect ratio, x/y will need a
+  one-pass re-tune.
+- Add a location <Picker> in AddEventModal sourced from LOCATION_LIST so
+  posters can't type a free-form location that won't match any pin.
+- Wire the per-pin modal to EventList filtered by selected pin id once
+  Talan's B4 lands.
