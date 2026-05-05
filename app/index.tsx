@@ -6,9 +6,9 @@ import { Image, Modal, Platform, Pressable, ScrollView, Text, useWindowDimension
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AboutScreen from "./aboutScreen";
 import AddEventModal from "./components/AddEventModal";
+import { LOCATIONS, LOCATION_LIST, type LocationId } from "./constants/locations";
 import { colors, radius, spacing, tap, typography } from "./constants/theme";
 import ImageC from "./image";
-import PinDetails from "./pinDetails";
 import { SideMenu } from './sideMenu';
 
 export default function Index() {
@@ -22,8 +22,21 @@ export default function Index() {
   // under iPhone's status bar or home indicator in portrait.
   const mapHeight = Math.max(height - topBarHeight - bottomBarHeight - insets.top - insets.bottom, 0);
 
-  const [modalVis, setModalVis] = useState(false);
+  // Single modal drives the details popup for whichever pin was last tapped.
+  // `selectedPinId` is the join key into LOCATIONS (and, eventually, into
+  // Firestore's per-location event query — see B4).
+  const [selectedPinId, setSelectedPinId] = useState<LocationId | null>(null);
+  const modalVis = selectedPinId !== null;
+  const selectedLocation = selectedPinId ? LOCATIONS[selectedPinId] : null;
+  const closeModal = () => setSelectedPinId(null);
+
   const [addEventVis, setAddEventVis] = useState(false);
+
+  // Pin marker visual size as fraction of map dims. Kept here (not in
+  // LOCATIONS) because it's a presentation concern shared by every pin —
+  // not a per-location attribute.
+  const PIN_W = 0.045;
+  const PIN_H = 0.075;
 
   return (
     // SafeAreaView keeps top bar below the iPhone notch/status bar and the
@@ -74,32 +87,34 @@ export default function Index() {
           contentFit="contain"
         />
 
-        {/* PinDetails marker — tapping shows an alert with placeholder text */}
-        <PinDetails
-          source={require("../assets/images/marker.png")}
-          style={{
-            position: "absolute",
-            top: mapHeight * 0.42,
-            left: mapWidth * 0.17,
-            width: mapWidth * 0.05,
-            height: mapHeight * 0.13,
-            zIndex: 999,
-          }}
-        />
-
-        {/* Second marker — tapping opens the event details modal */}
-        <Pressable
-          onPress={() => setModalVis(true)}
-          style={{ position: "absolute", top: mapHeight * 0.4, left: mapWidth * 0.5, width: mapWidth * 0.04, height: mapHeight * 0.065, zIndex: 9999 }}
-        >
-          <Image
-            source={require("../assets/images/marker.png")}
+        {/* Render every campus pin from the shared LOCATIONS map (D2/D3).
+            One source of truth means pin labels and Firestore `event.location`
+            join keys can never drift. Tapping any pin sets selectedPinId,
+            which opens the details modal below. */}
+        {LOCATION_LIST.map((loc) => (
+          <Pressable
+            key={loc.id}
+            onPress={() => setSelectedPinId(loc.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open details for ${loc.name}`}
+            // Center the marker on (x, y) by offsetting half its rendered size.
             style={{
-              width: "100%",
-              height: "100%",
+              position: "absolute",
+              top: mapHeight * loc.y - (mapHeight * PIN_H) / 2,
+              left: mapWidth * loc.x - (mapWidth * PIN_W) / 2,
+              width: mapWidth * PIN_W,
+              height: mapHeight * PIN_H,
+              zIndex: 999,
             }}
-          />
-        </Pressable>
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Image
+              source={require("../assets/images/marker.png")}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="contain"
+            />
+          </Pressable>
+        ))}
 
         {/* Modal popup shown when a marker is tapped, displays event info.
             Backdrop tap and Android hardware back both dismiss. */}
@@ -107,7 +122,7 @@ export default function Index() {
           visible={modalVis}
           animationType="fade"
           transparent={true}
-          onRequestClose={() => setModalVis(false)}
+          onRequestClose={closeModal}
           supportedOrientations={[
             "portrait",
             "portrait-upside-down",
@@ -117,7 +132,7 @@ export default function Index() {
           ]}
         >
           <Pressable
-            onPress={() => setModalVis(false)}
+            onPress={closeModal}
             style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.overlay }}
             accessibilityLabel="Close event details"
           >
@@ -136,7 +151,7 @@ export default function Index() {
             >
               {/* Close X — visible affordance, ≥44pt hit area, top-right. */}
               <Pressable
-                onPress={() => setModalVis(false)}
+                onPress={closeModal}
                 accessibilityRole="button"
                 accessibilityLabel="Close dialog"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -154,13 +169,25 @@ export default function Index() {
                 <Text style={{ ...typography.h3, color: colors.neutral600 }}>×</Text>
               </Pressable>
 
-              <Text style={{ ...typography.h3, color: colors.neutral900, marginBottom: spacing.xs, marginRight: tap.minSize }}>
-                Aztec Baseball Club
-              </Text>
-              {/* TODO(dvicente4482-sys): wire to dynamic event object instead of static text */}
-              <Text style={{ ...typography.body, color: colors.neutral700 }}>
-                3:30 – 5:30 pm
-              </Text>
+              {selectedLocation && (
+                <>
+                  <Text style={{ ...typography.h3, color: colors.neutral900, marginBottom: spacing.xs, marginRight: tap.minSize }}>
+                    {selectedLocation.name}
+                  </Text>
+                  {selectedLocation.notes && (
+                    <Text style={{ ...typography.caption, color: colors.neutral500, marginBottom: spacing.sm }}>
+                      {selectedLocation.notes}
+                    </Text>
+                  )}
+                  {/* TODO(B4 — Talan): replace with EventList filtered by
+                      `event.location === selectedLocation.id`. Until the
+                      Firestore-backed list lands, show a placeholder so the
+                      modal still feels alive. */}
+                  <Text style={{ ...typography.body, color: colors.neutral700 }}>
+                    No live events yet — check back soon.
+                  </Text>
+                </>
+              )}
             </Pressable>
           </Pressable>
         </Modal>
