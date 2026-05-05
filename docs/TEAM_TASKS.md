@@ -41,9 +41,9 @@ Branch: `feature/brandon/firebase-backend`
 - [x] **A3** `app/services/eventService.ts` — `addEvent()` wired into the
       Add Event modal in `app/index.tsx`
 - [x] **A4** `getActiveEvents()` filters by `expiresAt > now`
-- [ ] **A5** Replace strict text date inputs with
+- [x] **A5** Replace strict text date inputs with
       `@react-native-community/datetimepicker`
-- [ ] **A6** Jest tests for `addEvent` (valid + invalid) and
+- [x] **A6** Jest tests for `addEvent` (valid + invalid) and
       `getActiveEvents` (expiry filter)
 
 **Deliverables:** working `eventService.ts`, schema doc, date picker on the
