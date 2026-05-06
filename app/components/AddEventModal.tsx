@@ -1,11 +1,14 @@
 // Polished Add Event modal: labeled fields, inline validation, double-submit
 // guard, unmount-safe async, success/failure feedback. Posts to Firestore
-// via app/services/eventService.ts (A3).
-import { useEffect, useRef, useState } from "react";
+// via app/services/eventService.ts (A3). Date inputs use the native
+// datetime picker on iOS/Android and an HTML datetime-local control on web
+// (A5).
+import { createElement, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -16,15 +19,21 @@ import {
 import { addEvent } from "../services/eventService";
 import { colors, radius, spacing, tap, typography } from "../constants/theme";
 
-// Form state holds the raw text-input strings. The service expects parsed
-// Date objects — we convert at the submit boundary.
+// @react-native-community/datetimepicker has no web implementation. Loading
+// it via require behind a Platform check keeps the web bundle clean.
+const DateTimePicker =
+  Platform.OS !== "web"
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    ? require("@react-native-community/datetimepicker").default
+    : null;
+
 type EventFormState = {
   title: string;
   description: string;
   location: string;
   clubName: string;
-  startDate: string;
-  endDate: string;
+  startTime: Date | null;
+  endTime: Date | null;
 };
 
 type FieldErrors = Partial<Record<keyof EventFormState, string>>;
@@ -34,17 +43,15 @@ const EMPTY_FORM: EventFormState = {
   description: "",
   location: "",
   clubName: "",
-  startDate: "",
-  endDate: "",
+  startTime: null,
+  endTime: null,
 };
 
-// Accepts ISO-like "YYYY-MM-DDTHH:MM" (24-hour). Returns Date on valid input,
-// null otherwise. Brandon's branch can replace this with a date picker later.
-function parseDate(s: string): Date | null {
-  const re = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/;
-  if (!re.test(s)) return null;
-  const d = new Date(`${s}:00`);
-  return isNaN(d.getTime()) ? null : d;
+// Format a Date for an HTML <input type="datetime-local"> (local TZ, minute
+// precision — the input's native granularity).
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function validate(form: EventFormState): FieldErrors {
@@ -63,15 +70,13 @@ function validate(form: EventFormState): FieldErrors {
   if (!club) errors.clubName = "Required";
   else if (club.length > 60) errors.clubName = "Max 60 characters";
 
-  const start = parseDate(form.startDate);
-  if (!form.startDate.trim()) errors.startDate = "Required";
-  else if (!start) errors.startDate = "Use YYYY-MM-DDTHH:MM";
-  else if (start.getTime() < Date.now()) errors.startDate = "Must be in the future";
+  if (!form.startTime) errors.startTime = "Required";
+  else if (form.startTime.getTime() < Date.now()) errors.startTime = "Must be in the future";
 
-  const end = parseDate(form.endDate);
-  if (!form.endDate.trim()) errors.endDate = "Required";
-  else if (!end) errors.endDate = "Use YYYY-MM-DDTHH:MM";
-  else if (start && end && end.getTime() <= start.getTime()) errors.endDate = "Must be after start";
+  if (!form.endTime) errors.endTime = "Required";
+  else if (form.startTime && form.endTime.getTime() <= form.startTime.getTime()) {
+    errors.endTime = "Must be after start";
+  }
 
   return errors;
 }
@@ -126,17 +131,14 @@ export default function AddEventModal({ visible, onClose }: Props) {
 
     setSubmitting(true);
     try {
-      // Form-level validate() above already proved these parse, so the
-      // non-null assertions are safe. Service does its own sanity check.
-      const startTime = parseDate(form.startDate)!;
-      const endTime = parseDate(form.endDate)!;
+      // validate() above already proved both Dates are non-null.
       await addEvent({
         title: form.title,
         description: form.description,
         location: form.location,
         clubName: form.clubName,
-        startTime,
-        endTime,
+        startTime: form.startTime!,
+        endTime: form.endTime!,
       });
       if (!mountedRef.current) return;
       Alert.alert("Event added", "Your event has been posted.");
@@ -242,23 +244,17 @@ export default function AddEventModal({ visible, onClose }: Props) {
               error={showError("clubName") ? errors.clubName : undefined}
               maxLength={60}
             />
-            <Field
+            <DateField
               label="Starts"
-              value={form.startDate}
-              onChange={(v) => update("startDate", v)}
-              placeholder="2026-05-10T14:30"
-              hint="YYYY-MM-DDTHH:MM (24-hour)"
-              error={showError("startDate") ? errors.startDate : undefined}
-              autoCapitalize="none"
+              value={form.startTime}
+              onChange={(d) => update("startTime", d)}
+              error={showError("startTime") ? errors.startTime : undefined}
             />
-            <Field
+            <DateField
               label="Ends"
-              value={form.endDate}
-              onChange={(v) => update("endDate", v)}
-              placeholder="2026-05-10T16:00"
-              hint="YYYY-MM-DDTHH:MM (24-hour)"
-              error={showError("endDate") ? errors.endDate : undefined}
-              autoCapitalize="none"
+              value={form.endTime}
+              onChange={(d) => update("endTime", d)}
+              error={showError("endTime") ? errors.endTime : undefined}
             />
           </ScrollView>
 
@@ -358,6 +354,99 @@ function Field({ label, value, onChange, placeholder, hint, error, multiline, ma
       {!!hint && !error && (
         <Text style={{ ...typography.caption, color: colors.neutral500, marginTop: spacing.xs }}>{hint}</Text>
       )}
+      {!!error && (
+        <Text style={{ ...typography.caption, color: colors.danger, marginTop: spacing.xs }}>{error}</Text>
+      )}
+    </View>
+  );
+}
+
+type DateFieldProps = {
+  label: string;
+  value: Date | null;
+  onChange: (d: Date) => void;
+  error?: string;
+};
+
+function DateField({ label, value, onChange, error }: DateFieldProps) {
+  // Track whether the native picker is currently open. On Android the picker
+  // is a one-shot dialog opened on demand; on iOS we render it inline.
+  const [showAndroid, setShowAndroid] = useState(false);
+
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      <Text style={{ ...typography.caption, color: colors.neutral700, marginBottom: spacing.xs }}>
+        {label}
+      </Text>
+
+      {Platform.OS === "web"
+        ? createElement("input", {
+            type: "datetime-local",
+            value: value ? toLocalInputValue(value) : "",
+            onChange: (e: { target: { value: string } }) => {
+              const v = e.target.value;
+              if (v) onChange(new Date(v));
+            },
+            "aria-label": label,
+            style: {
+              ...typography.body,
+              color: colors.neutral900,
+              borderWidth: 1,
+              borderStyle: "solid",
+              borderColor: error ? colors.danger : colors.neutral300,
+              borderRadius: radius.md,
+              paddingLeft: spacing.md,
+              paddingRight: spacing.md,
+              paddingTop: spacing.sm,
+              paddingBottom: spacing.sm,
+              minHeight: tap.minSize,
+              backgroundColor: colors.white,
+              fontFamily: "inherit",
+              fontSize: 16,
+            },
+          })
+        : Platform.OS === "ios" ? (
+          <DateTimePicker
+            mode="datetime"
+            value={value ?? new Date()}
+            onChange={(_: unknown, d?: Date) => {
+              if (d) onChange(d);
+            }}
+            accessibilityLabel={label}
+          />
+        ) : (
+          <View>
+            <Pressable
+              onPress={() => setShowAndroid(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`${label}: open date picker`}
+              style={{
+                minHeight: tap.minSize,
+                borderWidth: 1,
+                borderColor: error ? colors.danger : colors.neutral300,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                justifyContent: "center",
+                backgroundColor: colors.white,
+              }}
+            >
+              <Text style={{ ...typography.body, color: value ? colors.neutral900 : colors.neutral500 }}>
+                {value ? toLocalInputValue(value).replace("T", " ") : "Tap to pick date and time"}
+              </Text>
+            </Pressable>
+            {showAndroid && (
+              <DateTimePicker
+                mode="datetime"
+                value={value ?? new Date()}
+                onChange={(_: unknown, d?: Date) => {
+                  setShowAndroid(false);
+                  if (d) onChange(d);
+                }}
+              />
+            )}
+          </View>
+        )}
+
       {!!error && (
         <Text style={{ ...typography.caption, color: colors.danger, marginTop: spacing.xs }}>{error}</Text>
       )}

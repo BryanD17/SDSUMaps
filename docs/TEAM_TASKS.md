@@ -41,9 +41,9 @@ Branch: `feature/brandon/firebase-backend`
 - [x] **A3** `app/services/eventService.ts` — `addEvent()` wired into the
       Add Event modal in `app/index.tsx`
 - [x] **A4** `getActiveEvents()` filters by `expiresAt > now`
-- [ ] **A5** Replace strict text date inputs with
+- [x] **A5** Replace strict text date inputs with
       `@react-native-community/datetimepicker`
-- [ ] **A6** Jest tests for `addEvent` (valid + invalid) and
+- [x] **A6** Jest tests for `addEvent` (valid + invalid) and
       `getActiveEvents` (expiry filter)
 
 **Deliverables:** working `eventService.ts`, schema doc, date picker on the
@@ -98,11 +98,11 @@ README with screenshots.
 
 Branch: `feature/matt/pins-integration`
 
-- [x] **D1** Audit current pins in `app/index.tsx`, write
+- [ ] **D1** Audit current pins in `app/index.tsx`, write
       `docs/pins_list.txt` (PinID | Location | x | y | Notes)
-- [x] **D2** Add 5–10 missing campus pins (Student Union, Love Library,
+- [ ] **D2** Add 5–10 missing campus pins (Student Union, Love Library,
       GMCS, ENS, Viejas, etc.) — aim for 10–15 total
-- [x] **D3** `app/constants/locations.ts` — shared `LOCATIONS` map so pin
+- [ ] **D3** `app/constants/locations.ts` — shared `LOCATIONS` map so pin
       labels and Firestore `location` strings always match
 - [ ] **D4** Integration merge: Brandon → Talan → Matt → Bryan, run
       `npx expo start` after each merge
