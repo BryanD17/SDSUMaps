@@ -59,10 +59,10 @@ Branch: `feature/talan/event-display`
 - [x] **B2** `app/components/EventList.tsx` — card list sorted by time
 - [x] **B3** Wire `EventList` into `app/sideMenu.tsx`; add loading + empty
       states
-- [ ] **B4** `app/pinDetails.tsx` — filter events to the tapped pin's
+- [x] **B4** `app/pinDetails.tsx` — filter events to the tapped pin's
       location (use `app/constants/locations.ts` from D3 for exact strings)
-- [ ] **B5** Swap mock data for `getActiveEvents()` once A4 lands
-- [ ] **B6** Render and filter tests; manual run via `npx expo start`
+- [x] **B5** Swap mock data for `getActiveEvents()` once A4 lands
+- [x] **B6** Render and filter tests; manual run via `npx expo start`
 
 **Deliverables:** event list visible in side menu and pin modal, live data
 once A4 ships, no hardcoded `Aztec Game Lab` placeholder rows.
@@ -83,7 +83,7 @@ Branch: `feature/bryan/ui-polish-map`
       affordance on every Modal
 - [x] **C4** Add Event form — labeled fields, inline validation, Cancel,
       submit spinner (`ActivityIndicator`), success Alert
-- [?] **C5** Manual responsive walkthrough on web / iOS portrait /
+- [x] **C5** Manual responsive walkthrough on web / iOS portrait /
       iOS landscape _(unverified — static contrast pass is green; awaiting
       Bryan's `npx expo start` walkthrough)_
 - [x] **C6** README — Firebase `.env` setup, project layout, dev commands,

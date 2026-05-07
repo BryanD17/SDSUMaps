@@ -1,15 +1,26 @@
 // Main screen of the app. Renders the SDSU campus map image with interactive
-// map markers (pins) overlaid on top. Tapping a pin opens a modal popup with
-// event details. Also renders the AboutScreen banner at the bottom.
-import { useState } from "react";
+// map markers (pins) overlaid on top. Tapping a pin opens a modal showing
+// the top 3 active events for that pin's location, with a "See All" button
+// that hands off to the side menu.
+//
+// Data flow (B5): getActiveEvents() is the source of truth. If the query
+// returns an empty list (or fails), MOCK_EVENTS is the fallback so the
+// demo doesn't show a blank state.
+import { useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AboutScreen from "./aboutScreen";
 import AddEventModal from "./components/AddEventModal";
+import EventList, { type Event } from "./components/EventList";
 import { LOCATIONS, LOCATION_LIST, type LocationId } from "./constants/locations";
 import { colors, radius, spacing, tap, typography } from "./constants/theme";
 import ImageC from "./image";
-import { SideMenu } from './sideMenu';
+import { getActiveEvents, type ActiveEvent } from "./services/eventService";
+import { SideMenu } from "./sideMenu";
+import { filterEventsByLocation, topNEventsByStartTime } from "./utils/eventFilter";
+import { MOCK_EVENTS } from "./utils/mockEvents";
+
+const PIN_MODAL_TOP_N = 3;
 
 export default function Index() {
   const { width, height } = useWindowDimensions();
@@ -18,29 +29,63 @@ export default function Index() {
   const topBarHeight = 56;
   const bottomBarHeight = 50;
   const mapWidth = width;
-  // Subtract notch/home-indicator insets so the ScrollView doesn't get clipped
-  // under iPhone's status bar or home indicator in portrait.
   const mapHeight = Math.max(height - topBarHeight - bottomBarHeight - insets.top - insets.bottom, 0);
 
-  // Single modal drives the details popup for whichever pin was last tapped.
-  // `selectedPinId` is the join key into LOCATIONS (and, eventually, into
-  // Firestore's per-location event query — see B4).
   const [selectedPinId, setSelectedPinId] = useState<LocationId | null>(null);
   const modalVis = selectedPinId !== null;
   const selectedLocation = selectedPinId ? LOCATIONS[selectedPinId] : null;
   const closeModal = () => setSelectedPinId(null);
 
   const [addEventVis, setAddEventVis] = useState(false);
+  const [sideMenuVis, setSideMenuVis] = useState(false);
 
-  // Pin marker visual size as fraction of map dims. Kept here (not in
-  // LOCATIONS) because it's a presentation concern shared by every pin —
-  // not a per-location attribute.
+  // B5: live events from Firestore, with a graceful fallback to mocks.
+  // ActiveEvent is a strict superset of Event (extra fields), so it's
+  // structurally assignable to Event[] for downstream consumers.
+  const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    setEventsLoading(true);
+    getActiveEvents()
+      .then((live: ActiveEvent[]) => {
+        if (!mountedRef.current) return;
+        // Empty live result still means "Firestore is online but quiet" —
+        // show mocks so the demo isn't blank.
+        setEvents(live.length > 0 ? live : MOCK_EVENTS);
+      })
+      .catch((err) => {
+        if (!mountedRef.current) return;
+        // Network / config error — log and fall back so the UI keeps working.
+        console.warn("getActiveEvents failed, falling back to MOCK_EVENTS:", err);
+        setEvents(MOCK_EVENTS);
+      })
+      .finally(() => {
+        if (mountedRef.current) setEventsLoading(false);
+      });
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // B4: top-N events for the currently-tapped pin. Filtered by LocationId
+  // so it works against both mock data (which now uses LocationId values)
+  // and live Firestore data (schema-mandated to use LocationId).
+  const pinEvents = selectedLocation
+    ? topNEventsByStartTime(filterEventsByLocation(events, selectedLocation.id), PIN_MODAL_TOP_N)
+    : [];
+
+  const handleSeeAll = () => {
+    setSelectedPinId(null);
+    setSideMenuVis(true);
+  };
+
+  // Pin marker visual size as fraction of map dims.
   const PIN_W = 0.045;
   const PIN_H = 0.075;
 
   return (
-    // SafeAreaView keeps top bar below the iPhone notch/status bar and the
-    // floating Add Event button above the home indicator, on iOS portrait.
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={["top", "bottom"]}>
       <View style={{ flex: 1, flexDirection: "column" }}>
       <View
@@ -57,10 +102,35 @@ export default function Index() {
         <Text style={{ ...typography.h2, color: colors.scarlet }}>SDSU Maps</Text>
       </View>
 
-      {/* SDSU campus map with pins anchored inside one responsive wrapper.
-          minimumZoomScale=1 prevents users from pinch-zooming below the
-          container size, which on iOS portrait used to leave the map
-          shrunken with white space around it. */}
+      {/* Side menu trigger lives here (not inside SideMenu) because the
+          panel is now a controlled component opened by both this button
+          and the per-pin "See All" handoff. */}
+      <Pressable
+        onPress={() => setSideMenuVis(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Open events list"
+        style={({ pressed }) => ({
+          position: "absolute",
+          top: insets.top + spacing.md,
+          left: spacing.md,
+          minHeight: tap.minSize,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          borderRadius: radius.md,
+          backgroundColor: pressed ? colors.scarletDark : colors.scarlet,
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          shadowColor: colors.black,
+          shadowOpacity: 0.18,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 3,
+        })}
+      >
+        <Text style={{ ...typography.button, color: colors.scarletInk }}>Events</Text>
+      </Pressable>
+
       <ScrollView
         style={{ width: mapWidth, height: mapHeight }}
         contentContainerStyle={{ width: mapWidth, height: mapHeight }}
@@ -73,31 +143,19 @@ export default function Index() {
         showsHorizontalScrollIndicator={false}
       >
       <View style={{ width: mapWidth, height: mapHeight, position: "relative" }}>
-        {/* TASK C1: campus map is now bundled locally instead of fetched from
-            an external URL (faster load, works offline, and lets us swap in
-            a higher-res official SDSU map by replacing this single asset).
-            TODO(bryan): replace sdsu_campus_map.jpg with a higher-resolution
-            export from https://map.sdsu.edu before final submission. */}
         <ImageC
           source={require("../assets/images/sdsu_campus_map.jpg")}
-          style={{
-            width: "100%",
-            height: "100%",
-          }}
+          style={{ width: "100%", height: "100%" }}
           contentFit="contain"
         />
 
-        {/* Render every campus pin from the shared LOCATIONS map (D2/D3).
-            One source of truth means pin labels and Firestore `event.location`
-            join keys can never drift. Tapping any pin sets selectedPinId,
-            which opens the details modal below. */}
+        {/* All campus pins from the shared LOCATIONS map (D2/D3). */}
         {LOCATION_LIST.map((loc) => (
           <Pressable
             key={loc.id}
             onPress={() => setSelectedPinId(loc.id)}
             accessibilityRole="button"
             accessibilityLabel={`Open details for ${loc.name}`}
-            // Center the marker on (x, y) by offsetting half its rendered size.
             style={{
               position: "absolute",
               top: mapHeight * loc.y - (mapHeight * PIN_H) / 2,
@@ -116,12 +174,12 @@ export default function Index() {
           </Pressable>
         ))}
 
-        {/* Modal popup shown when a marker is tapped, displays event info.
-            Backdrop tap and Android hardware back both dismiss. */}
+        {/* Per-pin events modal (B4). Filters live events by LocationId,
+            shows the top 3, and offers "See All" → side menu. */}
         <Modal
           visible={modalVis}
           animationType="fade"
-          transparent={true}
+          transparent
           onRequestClose={closeModal}
           supportedOrientations={[
             "portrait",
@@ -137,19 +195,17 @@ export default function Index() {
             accessibilityLabel="Close event details"
           >
             <Pressable
-              // Inner pressable swallows taps so backdrop dismiss only fires
-              // outside the card body.
               onPress={(e) => e.stopPropagation?.()}
               style={{
                 minWidth: Math.min(width * 0.7, 320),
-                maxWidth: 360,
+                maxWidth: 380,
+                width: "85%",
                 backgroundColor: colors.white,
                 borderRadius: radius.lg,
                 paddingVertical: spacing.lg,
                 paddingHorizontal: spacing.lg,
               }}
             >
-              {/* Close X — visible affordance, ≥44pt hit area, top-right. */}
               <Pressable
                 onPress={closeModal}
                 accessibilityRole="button"
@@ -171,7 +227,14 @@ export default function Index() {
 
               {selectedLocation && (
                 <>
-                  <Text style={{ ...typography.h3, color: colors.neutral900, marginBottom: spacing.xs, marginRight: tap.minSize }}>
+                  <Text
+                    style={{
+                      ...typography.h3,
+                      color: colors.neutral900,
+                      marginBottom: spacing.xs,
+                      marginRight: tap.minSize,
+                    }}
+                  >
                     {selectedLocation.name}
                   </Text>
                   {selectedLocation.notes && (
@@ -179,13 +242,26 @@ export default function Index() {
                       {selectedLocation.notes}
                     </Text>
                   )}
-                  {/* TODO(B4 — Talan): replace with EventList filtered by
-                      `event.location === selectedLocation.id`. Until the
-                      Firestore-backed list lands, show a placeholder so the
-                      modal still feels alive. */}
-                  <Text style={{ ...typography.body, color: colors.neutral700 }}>
-                    No live events yet — check back soon.
-                  </Text>
+
+                  <View style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
+                    <EventList events={pinEvents} loading={eventsLoading} hideLocation />
+                  </View>
+
+                  <Pressable
+                    onPress={handleSeeAll}
+                    accessibilityRole="button"
+                    accessibilityLabel="See all events"
+                    style={({ pressed }) => ({
+                      minHeight: tap.minSize,
+                      borderRadius: radius.md,
+                      backgroundColor: pressed ? colors.scarletDark : colors.scarlet,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingHorizontal: spacing.md,
+                    })}
+                  >
+                    <Text style={{ ...typography.button, color: colors.scarletInk }}>See all events</Text>
+                  </Pressable>
                 </>
               )}
             </Pressable>
@@ -196,8 +272,6 @@ export default function Index() {
 
       <AddEventModal visible={addEventVis} onClose={() => setAddEventVis(false)} />
 
-      {/* Floating "Add Event" button. bottom offset clears the AboutScreen
-          banner; minHeight=tap.minSize keeps the hit target ≥44pt. */}
       <Pressable
         onPress={() => setAddEventVis(true)}
         accessibilityRole="button"
@@ -228,8 +302,12 @@ export default function Index() {
         <AboutScreen />
       </View>
 
-      {/* Side menu (just seperated for ease of access, cleaner imo) */}
-      <SideMenu />
+      <SideMenu
+        visible={sideMenuVis}
+        onClose={() => setSideMenuVis(false)}
+        events={events}
+        loading={eventsLoading}
+      />
 
       </View>
     </SafeAreaView>
