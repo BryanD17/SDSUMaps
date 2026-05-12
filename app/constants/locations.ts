@@ -87,7 +87,7 @@ export const LOCATIONS: Record<LocationId, Location> = {
   ENS: {
     id: 'ENS',
     name: 'Exercise & Nutritional Sciences (ENS)',
-    x: 0.45,
+    x: 0.42,
     y: 0.42,
   },
   LOVE_LIBRARY: {
