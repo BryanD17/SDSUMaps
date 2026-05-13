@@ -13,6 +13,7 @@ import {
   addDoc,
   collection,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -116,4 +117,16 @@ export async function getActiveEvents(): Promise<ActiveEvent[]> {
   );
   const snap = await getDocs(q);
   return mapDocs(snap);
+}
+
+export function subscribeToActiveEvents(
+  onChange: (events: ActiveEvent[]) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const q = query(
+    collection(db, COLLECTION),
+    where("endTime", ">", Timestamp.now()),
+    orderBy("endTime", "asc"),
+  );
+  return onSnapshot(q, (snap) => onChange(mapDocs(snap)), onError);
 }

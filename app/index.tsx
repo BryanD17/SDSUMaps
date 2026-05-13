@@ -3,10 +3,10 @@
 // the top 3 active events for that pin's location, with a "See All" button
 // that hands off to the side menu.
 //
-// Data flow (B5): getActiveEvents() is the source of truth. If the query
-// returns an empty list (or fails), MOCK_EVENTS is the fallback so the
+// Data flow: subscribeToActiveEvents (onSnapshot) is the source of truth.
+// If the snapshot is empty or errors, MOCK_EVENTS is the fallback so the
 // demo doesn't show a blank state.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AboutScreen from "./aboutScreen";
@@ -15,7 +15,7 @@ import EventList, { type Event } from "./components/EventList";
 import { LOCATIONS, LOCATION_LIST, type LocationId } from "./constants/locations";
 import { colors, radius, spacing, tap, typography } from "./constants/theme";
 import ImageC from "./image";
-import { getActiveEvents, type ActiveEvent } from "./services/eventService";
+import { subscribeToActiveEvents, type ActiveEvent } from "./services/eventService";
 import { SideMenu } from "./sideMenu";
 import { filterEventsByLocation, topNEventsByStartTime } from "./utils/eventFilter";
 import { MOCK_EVENTS } from "./utils/mockEvents";
@@ -39,34 +39,24 @@ export default function Index() {
   const [addEventVis, setAddEventVis] = useState(false);
   const [sideMenuVis, setSideMenuVis] = useState(false);
 
-  // B5: live events from Firestore, with a graceful fallback to mocks.
+  // Live events from Firestore via onSnapshot, with graceful fallback to mocks.
   // ActiveEvent is a strict superset of Event (extra fields), so it's
   // structurally assignable to Event[] for downstream consumers.
   const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
   const [eventsLoading, setEventsLoading] = useState(true);
-  const mountedRef = useRef(true);
   useEffect(() => {
-    mountedRef.current = true;
-    setEventsLoading(true);
-    getActiveEvents()
-      .then((live: ActiveEvent[]) => {
-        if (!mountedRef.current) return;
-        // Empty live result still means "Firestore is online but quiet" —
-        // show mocks so the demo isn't blank.
+    const unsubscribe = subscribeToActiveEvents(
+      (live: ActiveEvent[]) => {
         setEvents(live.length > 0 ? live : MOCK_EVENTS);
-      })
-      .catch((err) => {
-        if (!mountedRef.current) return;
-        // Network / config error — log and fall back so the UI keeps working.
-        console.warn("getActiveEvents failed, falling back to MOCK_EVENTS:", err);
+        setEventsLoading(false);
+      },
+      (err) => {
+        console.warn("subscribeToActiveEvents error, falling back to MOCK_EVENTS:", err);
         setEvents(MOCK_EVENTS);
-      })
-      .finally(() => {
-        if (mountedRef.current) setEventsLoading(false);
-      });
-    return () => {
-      mountedRef.current = false;
-    };
+        setEventsLoading(false);
+      },
+    );
+    return unsubscribe;
   }, []);
 
   // B4: top-N events for the currently-tapped pin. Filtered by LocationId
