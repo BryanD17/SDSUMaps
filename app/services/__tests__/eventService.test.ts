@@ -1,6 +1,7 @@
 // A6 — unit tests for the events service.
 // We mock both firebase/firestore (to spy on calls without hitting a real DB)
 // and ../utils/firebase (whose module-level init throws on missing env vars).
+import type { LocationId } from "../../constants/locations";
 import { addEvent, getActiveEvents } from "../eventService";
 import { addDoc, getDocs, orderBy, where } from "firebase/firestore";
 
@@ -24,10 +25,17 @@ jest.mock("firebase/firestore", () => ({
 }));
 
 const future = (mins: number) => new Date(Date.now() + mins * 60_000);
-const validInput = () => ({
+const validInput = (): {
+  title: string;
+  description: string;
+  location: LocationId;
+  clubName: string;
+  startTime: Date;
+  endTime: Date;
+} => ({
   title: "Aztec Baseball practice",
   description: "Open practice, all welcome.",
-  location: "Tony Gwynn Stadium",
+  location: "STUDENT_UNION",
   clubName: "Baseball Club",
   startTime: future(60),
   endTime: future(120),

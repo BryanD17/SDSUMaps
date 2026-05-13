@@ -17,7 +17,10 @@ import {
   query,
   serverTimestamp,
   where,
+  type QuerySnapshot,
+  type DocumentData,
 } from "firebase/firestore";
+import { isLocationId, type LocationId } from "../constants/locations";
 import { auth, db } from "../utils/firebase";
 
 const COLLECTION = "events";
@@ -29,7 +32,7 @@ const CLUB_MAX = 60;
 export type EventInput = {
   title: string;
   description: string;
-  location: string;
+  location: LocationId;
   clubName: string;
   startTime: Date;
   endTime: Date;
@@ -39,7 +42,7 @@ export type ActiveEvent = {
   id: string;
   title: string;
   description: string;
-  location: string;
+  location: LocationId;
   clubName: string;
   startTime: Date;
   endTime: Date;
@@ -54,9 +57,8 @@ function validate(input: EventInput): string | null {
   if (!description) return "Description is required.";
   if (description.length > DESC_MAX) return `Description must be ${DESC_MAX} characters or fewer.`;
 
-  // TODO(brandon): once D3 ships app/constants/locations.ts, also assert
-  // location is a known LOCATIONS key. Until then, non-empty is the bar.
   if (!input.location.trim()) return "Location is required.";
+  if (!isLocationId(input.location)) return "Location must be a valid campus location.";
 
   const clubName = input.clubName.trim();
   if (!clubName) return "Club name is required.";
@@ -72,6 +74,21 @@ function validate(input: EventInput): string | null {
     return "End time must be after start time.";
   }
   return null;
+}
+
+function mapDocs(snap: QuerySnapshot<DocumentData>): ActiveEvent[] {
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      title: data.title,
+      description: data.description,
+      location: data.location as LocationId,
+      clubName: data.clubName,
+      startTime: (data.startTime as Timestamp).toDate(),
+      endTime: (data.endTime as Timestamp).toDate(),
+    };
+  });
 }
 
 export async function addEvent(input: EventInput): Promise<string> {
@@ -98,16 +115,5 @@ export async function getActiveEvents(): Promise<ActiveEvent[]> {
     orderBy("endTime", "asc"),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      title: data.title,
-      description: data.description,
-      location: data.location,
-      clubName: data.clubName,
-      startTime: (data.startTime as Timestamp).toDate(),
-      endTime: (data.endTime as Timestamp).toDate(),
-    };
-  });
+  return mapDocs(snap);
 }

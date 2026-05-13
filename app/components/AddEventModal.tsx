@@ -7,6 +7,7 @@ import { createElement, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -16,6 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { LOCATION_LIST, type LocationId } from "../constants/locations";
 import { addEvent } from "../services/eventService";
 import { colors, radius, spacing, tap, typography } from "../constants/theme";
 
@@ -30,7 +32,7 @@ const DateTimePicker =
 type EventFormState = {
   title: string;
   description: string;
-  location: string;
+  location: LocationId | null;
   clubName: string;
   startTime: Date | null;
   endTime: Date | null;
@@ -41,7 +43,7 @@ type FieldErrors = Partial<Record<keyof EventFormState, string>>;
 const EMPTY_FORM: EventFormState = {
   title: "",
   description: "",
-  location: "",
+  location: null,
   clubName: "",
   startTime: null,
   endTime: null,
@@ -64,7 +66,7 @@ function validate(form: EventFormState): FieldErrors {
   if (!description) errors.description = "Required";
   else if (description.length > 500) errors.description = "Max 500 characters";
 
-  if (!form.location.trim()) errors.location = "Required";
+  if (!form.location) errors.location = "Required";
 
   const club = form.clubName.trim();
   if (!club) errors.clubName = "Required";
@@ -131,11 +133,11 @@ export default function AddEventModal({ visible, onClose }: Props) {
 
     setSubmitting(true);
     try {
-      // validate() above already proved both Dates are non-null.
+      // validate() above already proved location and both Dates are non-null.
       await addEvent({
         title: form.title,
         description: form.description,
-        location: form.location,
+        location: form.location!,
         clubName: form.clubName,
         startTime: form.startTime!,
         endTime: form.endTime!,
@@ -229,11 +231,9 @@ export default function AddEventModal({ visible, onClose }: Props) {
               maxLength={500}
               multiline
             />
-            <Field
-              label="Location"
+            <LocationPicker
               value={form.location}
               onChange={(v) => update("location", v)}
-              placeholder="e.g. Tony Gwynn Stadium"
               error={showError("location") ? errors.location : undefined}
             />
             <Field
@@ -450,6 +450,149 @@ function DateField({ label, value, onChange, error }: DateFieldProps) {
       {!!error && (
         <Text style={{ ...typography.caption, color: colors.danger, marginTop: spacing.xs }}>{error}</Text>
       )}
+    </View>
+  );
+}
+
+type LocationPickerProps = {
+  value: LocationId | null;
+  onChange: (v: LocationId) => void;
+  error?: string;
+};
+
+function LocationPicker({ value, onChange, error }: LocationPickerProps) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const selectedName = value
+    ? LOCATION_LIST.find((l) => l.id === value)?.name ?? value
+    : null;
+
+  if (Platform.OS === "web") {
+    return (
+      <View style={{ marginBottom: spacing.md }}>
+        <Text style={{ ...typography.caption, color: colors.neutral700, marginBottom: spacing.xs }}>
+          Location
+        </Text>
+        {createElement("select", {
+          value: value ?? "",
+          onChange: (e: { target: { value: string } }) => {
+            if (e.target.value) onChange(e.target.value as LocationId);
+          },
+          "aria-label": "Location",
+          style: {
+            ...typography.body,
+            color: value ? colors.neutral900 : colors.neutral500,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: error ? colors.danger : colors.neutral300,
+            borderRadius: radius.md,
+            paddingLeft: spacing.md,
+            paddingRight: spacing.md,
+            paddingTop: spacing.sm,
+            paddingBottom: spacing.sm,
+            minHeight: tap.minSize,
+            backgroundColor: colors.white,
+            fontFamily: "inherit",
+            fontSize: 16,
+          },
+        },
+          createElement("option", { value: "", disabled: true }, "Select a location"),
+          ...LOCATION_LIST.map((loc) =>
+            createElement("option", { key: loc.id, value: loc.id }, loc.name),
+          ),
+        )}
+        {!!error && (
+          <Text style={{ ...typography.caption, color: colors.danger, marginTop: spacing.xs }}>{error}</Text>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      <Text style={{ ...typography.caption, color: colors.neutral700, marginBottom: spacing.xs }}>
+        Location
+      </Text>
+      <Pressable
+        onPress={() => setPickerOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Location: open picker"
+        style={{
+          minHeight: tap.minSize,
+          borderWidth: 1,
+          borderColor: error ? colors.danger : colors.neutral300,
+          borderRadius: radius.md,
+          paddingHorizontal: spacing.md,
+          justifyContent: "center",
+          backgroundColor: colors.white,
+        }}
+      >
+        <Text style={{ ...typography.body, color: selectedName ? colors.neutral900 : colors.neutral500 }}>
+          {selectedName ?? "Select a location"}
+        </Text>
+      </Pressable>
+      {!!error && (
+        <Text style={{ ...typography.caption, color: colors.danger, marginTop: spacing.xs }}>{error}</Text>
+      )}
+      <Modal
+        visible={pickerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{
+            backgroundColor: colors.white,
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
+            maxHeight: "60%",
+            paddingTop: spacing.md,
+          }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+              <Text style={{ ...typography.h3, color: colors.neutral900 }}>Select Location</Text>
+              <Pressable
+                onPress={() => setPickerOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close location picker"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ ...typography.h3, color: colors.neutral600 }}>×</Text>
+              </Pressable>
+            </View>
+            <FlatList
+              data={LOCATION_LIST}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    onChange(item.id);
+                    setPickerOpen(false);
+                  }}
+                  accessibilityRole="button"
+                  style={({ pressed }) => ({
+                    paddingVertical: spacing.md,
+                    paddingHorizontal: spacing.lg,
+                    backgroundColor: item.id === value
+                      ? colors.neutral100
+                      : pressed
+                        ? colors.neutral100
+                        : colors.white,
+                  })}
+                >
+                  <Text style={{
+                    ...typography.body,
+                    color: item.id === value ? colors.scarlet : colors.neutral900,
+                  }}>
+                    {item.name}
+                  </Text>
+                </Pressable>
+              )}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 1, backgroundColor: colors.neutral200, marginHorizontal: spacing.lg }} />
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
