@@ -8,6 +8,7 @@ import { addDoc, getDocs, orderBy, where } from "firebase/firestore";
 jest.mock("../../utils/firebase", () => ({
   db: {},
   auth: { currentUser: null },
+  firebaseReady: true,
 }));
 
 jest.mock("firebase/firestore", () => ({

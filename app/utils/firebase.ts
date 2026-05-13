@@ -12,24 +12,41 @@ const requiredEnvKeys = [
 ] as const;
 
 const missing = requiredEnvKeys.filter((k) => !process.env[k]);
-if (missing.length) {
-  throw new Error(
-    `Missing Firebase env vars: ${missing.join(', ')}. ` +
-      `Copy .env.example to .env and fill in values from the Firebase console.`,
-  );
+
+export const firebaseReady: boolean = missing.length === 0;
+
+function unconfiguredProxy<T extends object>(name: string): T {
+  return new Proxy({} as T, {
+    get: () => {
+      throw new Error(
+        `Firebase ${name} not configured. Missing env vars: ${missing.join(', ')}. ` +
+          `Copy .env.example to .env and fill in values from the Firebase console.`,
+      );
+    },
+  });
 }
 
-const firebaseConfig: FirebaseOptions = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-};
+let db: Firestore;
+let auth: Auth;
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+if (firebaseReady) {
+  const firebaseConfig: FirebaseOptions = {
+    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  };
+  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  auth = getAuth(app);
+} else {
+  console.warn(
+    `Firebase not configured (missing: ${missing.join(', ')}). Running in mock-data mode.`,
+  );
+  db = unconfiguredProxy<Firestore>('Firestore');
+  auth = unconfiguredProxy<Auth>('Auth');
+}
 
-export const db: Firestore = getFirestore(app);
-export const auth: Auth = getAuth(app);
-export { app };
+export { db, auth };

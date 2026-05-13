@@ -22,7 +22,7 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { isLocationId, type LocationId } from "../constants/locations";
-import { auth, db } from "../utils/firebase";
+import { auth, db, firebaseReady } from "../utils/firebase";
 
 const COLLECTION = "events";
 
@@ -93,6 +93,9 @@ function mapDocs(snap: QuerySnapshot<DocumentData>): ActiveEvent[] {
 }
 
 export async function addEvent(input: EventInput): Promise<string> {
+  if (!firebaseReady) {
+    throw new Error("Cannot add event: Firebase is not configured. See .env.example.");
+  }
   const error = validate(input);
   if (error) throw new Error(error);
 

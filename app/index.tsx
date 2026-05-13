@@ -16,6 +16,7 @@ import { LOCATIONS, LOCATION_LIST, type LocationId } from "./constants/locations
 import { colors, radius, spacing, tap, typography } from "./constants/theme";
 import ImageC from "./image";
 import { subscribeToActiveEvents, type ActiveEvent } from "./services/eventService";
+import { firebaseReady } from "./utils/firebase";
 import { SideMenu } from "./sideMenu";
 import { filterEventsByLocation, topNEventsByStartTime } from "./utils/eventFilter";
 import { MOCK_EVENTS } from "./utils/mockEvents";
@@ -45,6 +46,11 @@ export default function Index() {
   const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
   const [eventsLoading, setEventsLoading] = useState(true);
   useEffect(() => {
+    if (!firebaseReady) {
+      setEvents(MOCK_EVENTS);
+      setEventsLoading(false);
+      return;
+    }
     const unsubscribe = subscribeToActiveEvents(
       (live: ActiveEvent[]) => {
         setEvents(live.length > 0 ? live : MOCK_EVENTS);
