@@ -77,7 +77,28 @@ export default function Index() {
     setSideMenuVis(true);
   };
 
-  // Pin marker visual size as fraction of map dims.
+  // Compute the actual rendered image size within the container.
+  // The image uses contentFit="contain", so it fits within (mapWidth × mapHeight)
+  // while preserving its aspect ratio. Pins must be positioned relative to
+  // the rendered image, not the full container, or they drift on resize.
+  const MAP_ASPECT = 2641 / 1755; // intrinsic image width / height
+  const containerAspect = mapWidth / (mapHeight || 1);
+  let imgW: number, imgH: number, imgOffsetX: number, imgOffsetY: number;
+  if (containerAspect > MAP_ASPECT) {
+    // Container is wider than the image — image fills height, letterboxed horizontally.
+    imgH = mapHeight;
+    imgW = mapHeight * MAP_ASPECT;
+    imgOffsetX = (mapWidth - imgW) / 2;
+    imgOffsetY = 0;
+  } else {
+    // Container is taller than the image — image fills width, letterboxed vertically.
+    imgW = mapWidth;
+    imgH = mapWidth / MAP_ASPECT;
+    imgOffsetX = 0;
+    imgOffsetY = (mapHeight - imgH) / 2;
+  }
+
+  // Pin marker visual size as fraction of rendered image dims.
   const PIN_W = 0.045;
   const PIN_H = 0.075;
 
@@ -154,10 +175,10 @@ export default function Index() {
             accessibilityLabel={`Open details for ${loc.name}`}
             style={{
               position: "absolute",
-              top: mapHeight * loc.y - (mapHeight * PIN_H) / 2,
-              left: mapWidth * loc.x - (mapWidth * PIN_W) / 2,
-              width: mapWidth * PIN_W,
-              height: mapHeight * PIN_H,
+              top: imgOffsetY + imgH * loc.y - (imgH * PIN_H) / 2,
+              left: imgOffsetX + imgW * loc.x - (imgW * PIN_W) / 2,
+              width: imgW * PIN_W,
+              height: imgH * PIN_H,
               zIndex: 999,
             }}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}

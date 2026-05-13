@@ -6,7 +6,6 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -20,6 +19,7 @@ import {
 import { LOCATION_LIST, type LocationId } from "../constants/locations";
 import { addEvent } from "../services/eventService";
 import { colors, radius, spacing, tap, typography } from "../constants/theme";
+import { firebaseReady } from "../utils/firebase";
 
 // @react-native-community/datetimepicker has no web implementation. Loading
 // it via require behind a Platform check keeps the web bundle clean.
@@ -96,6 +96,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   // Avoid setState after unmount when the user dismisses mid-submit.
   const mountedRef = useRef(true);
@@ -116,6 +117,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
     setForm(EMPTY_FORM);
     setErrors({});
     setSubmitAttempted(false);
+    setSubmitResult(null);
   }
 
   function handleCancel() {
@@ -127,6 +129,7 @@ export default function AddEventModal({ visible, onClose }: Props) {
   async function handleSubmit() {
     if (submitting) return;
     setSubmitAttempted(true);
+    setSubmitResult(null);
     const next = validate(form);
     setErrors(next);
     if (Object.keys(next).length > 0) return;
@@ -143,13 +146,17 @@ export default function AddEventModal({ visible, onClose }: Props) {
         endTime: form.endTime!,
       });
       if (!mountedRef.current) return;
-      Alert.alert("Event added", "Your event has been posted.");
-      reset();
-      onClose();
+      setSubmitResult({ type: "success", msg: "Event added! Your event has been posted." });
+      // Brief delay so the user sees the success message before the modal closes.
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        reset();
+        onClose();
+      }, 1200);
     } catch (e: unknown) {
       if (!mountedRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert("Could not add event", msg);
+      setSubmitResult({ type: "error", msg });
     } finally {
       if (mountedRef.current) setSubmitting(false);
     }
@@ -208,6 +215,39 @@ export default function AddEventModal({ visible, onClose }: Props) {
               <Text style={{ ...typography.h2, color: colors.neutral600 }}>×</Text>
             </Pressable>
           </View>
+
+          {!firebaseReady && (
+            <View style={{
+              backgroundColor: "#FFF3CD",
+              borderRadius: radius.md,
+              padding: spacing.md,
+              marginBottom: spacing.md,
+              borderWidth: 1,
+              borderColor: "#FFECB5",
+            }}>
+              <Text style={{ ...typography.caption, color: "#664D03" }}>
+                Firebase is not configured. Events cannot be saved. Copy .env.example to .env and add your Firebase keys.
+              </Text>
+            </View>
+          )}
+
+          {submitResult && (
+            <View style={{
+              backgroundColor: submitResult.type === "success" ? "#D1E7DD" : "#F8D7DA",
+              borderRadius: radius.md,
+              padding: spacing.md,
+              marginBottom: spacing.md,
+              borderWidth: 1,
+              borderColor: submitResult.type === "success" ? "#BADBCC" : "#F5C2C7",
+            }}>
+              <Text style={{
+                ...typography.caption,
+                color: submitResult.type === "success" ? "#0F5132" : "#842029",
+              }}>
+                {submitResult.msg}
+              </Text>
+            </View>
+          )}
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -280,27 +320,30 @@ export default function AddEventModal({ visible, onClose }: Props) {
             </Pressable>
             <Pressable
               onPress={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || !firebaseReady}
               accessibilityRole="button"
               accessibilityLabel="Submit new event"
-              accessibilityState={{ busy: submitting, disabled: submitting }}
+              accessibilityState={{ busy: submitting, disabled: submitting || !firebaseReady }}
               style={({ pressed }) => ({
                 flex: 1,
                 minHeight: tap.minSize,
                 borderRadius: radius.md,
-                backgroundColor: submitting
-                  ? colors.scarletDark
-                  : pressed
+                backgroundColor: !firebaseReady
+                  ? colors.neutral300
+                  : submitting
                     ? colors.scarletDark
-                    : colors.scarlet,
+                    : pressed
+                      ? colors.scarletDark
+                      : colors.scarlet,
                 alignItems: "center",
                 justifyContent: "center",
                 flexDirection: "row",
                 gap: spacing.sm,
+                opacity: !firebaseReady ? 0.6 : 1,
               })}
             >
               {submitting && <ActivityIndicator color={colors.scarletInk} />}
-              <Text style={{ ...typography.button, color: colors.scarletInk }}>
+              <Text style={{ ...typography.button, color: !firebaseReady ? colors.neutral600 : colors.scarletInk }}>
                 {submitting ? "Adding…" : "Add Event"}
               </Text>
             </Pressable>
