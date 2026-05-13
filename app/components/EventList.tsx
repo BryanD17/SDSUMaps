@@ -11,6 +11,8 @@ export type Event = {
   location: string;
   startTime: Date;
   endTime: Date;
+  description?: string;
+  clubName?: string;
 };
 
 type Props = {
@@ -35,6 +37,10 @@ const EventCard = ({ item, hideLocation }: { item: Event; hideLocation?: boolean
       <Text style={styles.time}>
         {formatTime(item.startTime)} – {formatTime(item.endTime)}
       </Text>
+      {!!item.clubName && <Text style={styles.clubName}>{item.clubName}</Text>}
+      {!!item.description && (
+        <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+      )}
     </View>
   );
 };
@@ -87,6 +93,16 @@ const styles = StyleSheet.create({
   },
   time: {
     ...typography.caption,
+    color: colors.neutral700,
+    marginTop: 2,
+  },
+  clubName: {
+    ...typography.caption,
+    color: colors.neutral600,
+    marginTop: 2,
+  },
+  description: {
+    ...typography.body,
     color: colors.neutral700,
     marginTop: 2,
   },

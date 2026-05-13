@@ -1,12 +1,14 @@
 // A6 — unit tests for the events service.
 // We mock both firebase/firestore (to spy on calls without hitting a real DB)
 // and ../utils/firebase (whose module-level init throws on missing env vars).
-import { addEvent, getActiveEvents } from "../eventService";
-import { addDoc, getDocs, orderBy, where } from "firebase/firestore";
+import type { LocationId } from "../../constants/locations";
+import { addEvent, getActiveEvents, subscribeToActiveEvents } from "../eventService";
+import { addDoc, getDocs, onSnapshot, orderBy, where } from "firebase/firestore";
 
 jest.mock("../../utils/firebase", () => ({
   db: {},
   auth: { currentUser: null },
+  firebaseReady: true,
 }));
 
 jest.mock("firebase/firestore", () => ({
@@ -17,6 +19,7 @@ jest.mock("firebase/firestore", () => ({
   addDoc: jest.fn(),
   collection: jest.fn(() => ({})),
   getDocs: jest.fn(),
+  onSnapshot: jest.fn(),
   orderBy: jest.fn(),
   query: jest.fn(() => ({})),
   serverTimestamp: jest.fn(() => "SERVER_TS"),
@@ -24,10 +27,17 @@ jest.mock("firebase/firestore", () => ({
 }));
 
 const future = (mins: number) => new Date(Date.now() + mins * 60_000);
-const validInput = () => ({
+const validInput = (): {
+  title: string;
+  description: string;
+  location: LocationId;
+  clubName: string;
+  startTime: Date;
+  endTime: Date;
+} => ({
   title: "Aztec Baseball practice",
   description: "Open practice, all welcome.",
-  location: "Tony Gwynn Stadium",
+  location: "STUDENT_UNION",
   clubName: "Baseball Club",
   startTime: future(60),
   endTime: future(120),
@@ -104,5 +114,62 @@ describe("getActiveEvents", () => {
         endTime: end,
       },
     ]);
+  });
+});
+
+describe("addEvent — LocationId enforcement", () => {
+  it("rejects when location is not a valid LocationId", async () => {
+    await expect(
+      addEvent({
+        ...validInput(),
+        location: "Tony Gwynn Stadium" as unknown as LocationId,
+      }),
+    ).rejects.toThrow(/valid campus location/);
+    expect(addDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe("subscribeToActiveEvents", () => {
+  it("invokes onChange with mapped ActiveEvent[] on snapshot", () => {
+    const start = future(30);
+    const end = future(90);
+    const fakeSnap = {
+      docs: [
+        {
+          id: "sub-1",
+          data: () => ({
+            title: "Live",
+            description: "Desc",
+            location: "GMCS",
+            clubName: "CS Club",
+            startTime: { toDate: () => start },
+            endTime: { toDate: () => end },
+          }),
+        },
+      ],
+    };
+    const mockUnsub = jest.fn();
+    (onSnapshot as jest.Mock).mockImplementation((_q, onNext) => {
+      onNext(fakeSnap);
+      return mockUnsub;
+    });
+
+    const onChange = jest.fn();
+    const unsub = subscribeToActiveEvents(onChange);
+
+    expect(onChange).toHaveBeenCalledWith([
+      {
+        id: "sub-1",
+        title: "Live",
+        description: "Desc",
+        location: "GMCS",
+        clubName: "CS Club",
+        startTime: start,
+        endTime: end,
+      },
+    ]);
+    expect(typeof unsub).toBe("function");
+    unsub();
+    expect(mockUnsub).toHaveBeenCalled();
   });
 });

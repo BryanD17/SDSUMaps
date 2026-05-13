@@ -24,7 +24,7 @@ events list, and post your own club event.
   for notch / home-indicator awareness
 - [`expo-image`](https://docs.expo.dev/versions/latest/sdk/image/) for the
   campus map asset (better caching + format support than RN's built-in)
-- Firebase Firestore (wiring lives on `feature/brandon/firebase-backend`)
+- Firebase Firestore with real-time `onSnapshot` subscriptions on `master`
 
 ## Group 4 — who's doing what
 
@@ -127,15 +127,8 @@ assets/
   placeholder. A higher-resolution export from <https://map.sdsu.edu>
   should be dropped in before final submission. Pin coordinates are
   proportional, so swapping a similar-aspect image will not break alignment.
-- Add Event currently writes to a 600 ms stub (`addEventStub` in
-  `app/components/AddEventModal.tsx`). It will hit Firestore once
-  Brandon's `eventService.ts` lands on `master`; replacing the stub is a
-  one-line import swap.
 - No authentication yet — anyone running the app can post an event.
   Auth is planned for a follow-up sprint.
-- Date/time inputs are currently text fields with `YYYY-MM-DDTHH:MM`
-  validation, not a native date picker; we'll add
-  `@react-native-community/datetimepicker` after the data layer lands.
 - App icon (`assets/images/icon.png`) is the Expo default; needs a
   designed mark before submission.
 
@@ -158,3 +151,18 @@ npx tsc --noEmit # type-check without building
 - Never push directly to `master`; never `git push --force` (use
   `--force-with-lease` on your own feature branch only, after a rebase
   you initiated).
+
+## AI tools used
+
+This project was developed with the assistance of Claude Code
+(Anthropic), used as a code-generation and pair-programming tool.
+
+The development pattern: I author the project plan, architecture
+decisions, design tokens, and review every change before it lands
+on a branch. The AI tooling generates the corresponding
+implementation under my instructions and commits on my behalf.
+
+All commits in this repository are authored under my git
+identity because I plan, direct, review, and accept
+responsibility for the work. This disclosure exists so that the
+use of AI tooling is part of the public record of the project.
